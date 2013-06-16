@@ -1,3 +1,5 @@
+module.exports = diff
+
 var levelup = require('levelup')
   , assert = require("assert")
   , EE = require("events")
@@ -15,11 +17,11 @@ var levelup = require('levelup')
 
 // takes two params, A, and B, the old and new documents
 
-function diff(A, B, trimSpace, ignoreCase, ready){
+function diff(A, B, options, ready){
   // h is a hashtable for the texts in question. It is going to have an element
   // for each word in A and each word in B
-  var trimSpace = !!trimSpace
-    , ignoreCase = !!trimSpace
+  var trimSpace = !!options.trimSpace
+    , ignoreCase = !!options.ignoreCase
   
   // h may provide a good opportunity to make use of levelup/leveldb.
   var h = levelup("./data_hash")
@@ -61,7 +63,9 @@ function diff(A, B, trimSpace, ignoreCase, ready){
   
   // hashes textlines to number for ease of references
   function diffcodes(text, emmitter, h, trimSpace, ignoreCase) {
-    var lines
+
+    var line_emitter = new EE
+      , lines
       , codes
 
     text = text.replace("\r", "")
@@ -69,6 +73,9 @@ function diff(A, B, trimSpace, ignoreCase, ready){
 
     codes = new Array(lines.length)
 
+    // I'm using the emitter here essentially to avoid nesting scope-- We
+    // shouldn't run out of heap just because the file gets big.
+    line_emitter.on('lines', encode)
     encode(lines)
 
     // basically for each line, try to read it out of the db. If you fail, then
@@ -78,8 +85,8 @@ function diff(A, B, trimSpace, ignoreCase, ready){
     // hence the recursive function below which will wait for the async operation to
     // finish before firing the next one in the series.
 
-    // this wont be faster than using regular old js objects, but it does have some nice properties.
-
+    // this wont be faster than using regular old js objects, but it does have
+    // some nice properties.
     function encode(lines) {
       var ready = true
 
@@ -102,19 +109,18 @@ function diff(A, B, trimSpace, ignoreCase, ready){
         // will return an error if the key does not exist
         if (err){
           h.put(s, lastUsedCode, function(err, dat){
-            console.log(data) // what the hell is this going to be?
             assert.ok(!err, "There was an error writing to the DB \n" + err)
+            console.log(dat) // what the hell is this going to be?
             codes[i] = lastUsedCode
-            encode(lines)
+            line_emitter.emit('lines', lines)
           })
         } else {
           codes[i] = data
-          encode(lines)
+          line_emitter.emit('lines', lines)
         }
       })
     }
   }
-
 
   // If a sequence of modified lines starts with a line that contains the same content
   // as the line that appends the changes, the difference sequence is modified so that the
@@ -149,6 +155,52 @@ function diff(A, B, trimSpace, ignoreCase, ready){
   }
 }
 
+// params:
+// - dataA: first sequence
+// - dataB: second sequence
+// - lowerA: lower bound of the actual range of dataA
+// - upperA: upper bound of the actual range of dataA
+// - lowerB: lower bound of the actual range of dataA
+// - upperB: upper bound of the actual range of dataA
+// - downvector: a vector for the x,y to 0,0 search
+// - upvector: a vector for the 0,0 to (m,n) search
+
+// returns a vecor containing x,y 
+  
+function shortest_middle_snake(dataA, lowerA, upperA, dataB, lowerB, upperB, downVector, upVector) {
+
+  // `downK` the index of the diagonal from which to start seraching from the
+  // lower right hand corner. Likewise `upK` is where we start searching from the
+  // upper left.
+  var ret = {x: null, y: null}
+    , max = dataA.length + dataB.length + 1
+    , downK = lowerA - lowerB
+    , upK = upperA - upperB
+    , delta = (upperA - lowerA) - (upperB - lowerB)
+    , addDelta = delta & 1 != 0; // TODO: check that the behavior of this is the same in c# and js.
+    , downOffset = max - downK // offsets translate from negative indices of publication to here.
+    , upOffset = max - upK     // TODO: consider implementing negative offset arrays.
+    , maxD = ((upperA - lowerA + upperB - lowerB) / 2) + 1
+    , x
+    , y
+
+  //initializing a value of the vectors
+  downVector[downOffset + downK + 1] = lowerA
+  upVector[upOffset + upK + 1] = lowerA
+
+  for(var D = 0; D <= maxD; ++D) {
+
+    // Extend the forward path:
+    for(var k = downK - d; k <= downK + D; k += 2) {
+      if (k == downK -D) {
+        // TODO: figure out a quick way to describe what these all mean, as we do it.
+        x = downVector[downOffset + k + 1]
+      }
+    }
+  }
+  
+}
+
 
 // initData is an array of integers
 function DiffData(initData) {
@@ -165,5 +217,3 @@ function DiffData(initData) {
   this.modified = modified
   this.length = length
 }
-
-
