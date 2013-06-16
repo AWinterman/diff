@@ -9,13 +9,13 @@ var a = "a,b,c,d,e,f,g,h,i,j,k,l".replace(',', '\n')
 diff = new Differ
 
 // these are kinda integration tests?
-test("all different", funciton(t) {
+test("all different", function(t) {
   t.plan(1)
   t.equal(diff.difftext(a, b), "12.10.0.0*")
 })
 
 
-test("all the same", funciton(t) {
+test("all the same", function(t) {
   t.plan(1)
   var a = "a,b,c,d,e,f,g,h,i,j,k,l".replace(',', '\n')
     , b = a
